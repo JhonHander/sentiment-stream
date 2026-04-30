@@ -1,0 +1,168 @@
+# =============================================================================
+# docker-compose.yml — Sentiment Stream Complete Stack
+# =============================================================================
+# Services: MongoDB, Spark (master + worker), FastAPI, Dashboard
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # MongoDB — Primary data store
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: sentiment-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./infra/mongodb-init.js:/docker-entrypoint-initdb.d/mongodb-init.js:ro
+    environment:
+      MONGO_INITDB_DATABASE: sentiment_stream
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sentiment-network
+
+  # ---------------------------------------------------------------------------
+  # Spark Master
+  # ---------------------------------------------------------------------------
+  spark-master:
+    build:
+      context: ..
+      dockerfile: spark/Dockerfile
+    container_name: sentiment-spark-master
+    restart: unless-stopped
+    hostname: spark-master
+    command:
+      - "spark-class"
+      - "org.apache.spark.deploy.master.Master"
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+      - "8888:8888"
+    environment:
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+      - MONGO_URI=mongodb://mongodb:27017/sentiment_stream
+      - CSV_PATH=/app/data/dataset_sentimientos_500.csv
+      - MODEL_PATH=/app/model
+    volumes:
+      - model_storage:/app/model
+      - ../data:/app/data:ro
+    networks:
+      - sentiment-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ > /dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Spark Worker
+  # ---------------------------------------------------------------------------
+  spark-worker:
+    build:
+      context: ..
+      dockerfile: spark/Dockerfile
+    container_name: sentiment-spark-worker
+    restart: unless-stopped
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command:
+      - "spark-class"
+      - "org.apache.spark.deploy.worker.Worker"
+      - "spark://spark-master:7077"
+    environment:
+      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_WORKER_PORT=7078
+      - MONGO_URI=mongodb://mongodb:27017/sentiment_stream
+      - CSV_PATH=/app/data/dataset_sentimientos_500.csv
+      - MODEL_PATH=/app/model
+    volumes:
+      - model_storage:/app/model
+      - ../data:/app/data:ro
+    ports:
+      - "8081:8081"
+    networks:
+      - sentiment-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/ > /dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # FastAPI Backend
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    container_name: sentiment-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+      - MONGO_DB=sentiment_stream
+      - MODEL_PATH=/app/model
+    volumes:
+      - model_storage:/app/model:ro
+    networks:
+      - sentiment-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health | grep -q ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Dashboard (Static HTML/JS served by nginx)
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
+    container_name: sentiment-dashboard
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - sentiment-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  mongo-data:
+    driver: local
+  model_storage:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  sentiment-network:
+    driver: bridge
+    name: sentiment-network

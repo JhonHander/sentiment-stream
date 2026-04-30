@@ -1,0 +1,55 @@
+# =============================================================================
+# docker-compose.test.yml — Integration Test Profile
+# =============================================================================
+# Uses alternative ports to avoid conflicts with production stack.
+# =============================================================================
+
+services:
+  mongodb-test:
+    image: mongo:7.0
+    container_name: sentiment-mongodb-test
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-data-test:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: sentiment_stream_test
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1}).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - sentiment-test-network
+
+  api-test:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    container_name: sentiment-api-test
+    ports:
+      - "8001:8000"
+    depends_on:
+      mongodb-test:
+        condition: service_healthy
+    environment:
+      - MONGO_URI=mongodb://mongodb-test:27017
+      - MONGO_DB=sentiment_stream_test
+      - MODEL_PATH=/app/model
+    volumes:
+      - model_storage_test:/app/model:ro
+    networks:
+      - sentiment-test-network
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+volumes:
+  mongo-data-test:
+    driver: local
+  model_storage_test:
+    driver: local
+
+networks:
+  sentiment-test-network:
+    driver: bridge
+    name: sentiment-test-network
