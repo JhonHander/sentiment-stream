@@ -134,7 +134,11 @@ def train_model(spark: SparkSession):
         recall_per_class[label_name] = round(recall, 4)
 
     model_version = f"v1_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    ...
+    metrics = {
+        "accuracy": round(accuracy, 4),
+        "f1": round(f1, 4),
+        "precision_per_class": precision_per_class,
+        "recall_per_class": recall_per_class,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "model_version": model_version,
     }
