@@ -1,8 +1,8 @@
 // =============================================================================
 // Jenkinsfile — Declarative Pipeline for Sentiment Stream
 // =============================================================================
-// Stages: Checkout -> Build -> Test -> Lint -> Deploy
-// Uses skipStagesAfterUnstable() to gate deployment.
+// Stages: Checkout → Build → Unit Tests → Lint → Integration Tests → Deploy
+// Quality gates: tests and lint MUST pass before deployment proceeds.
 // =============================================================================
 
 pipeline {
@@ -12,91 +12,135 @@ pipeline {
         skipStagesAfterUnstable()
         timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
+        timestamps()
     }
 
     environment {
         COMPOSE_PROJECT_NAME = "sentiment-stream-${BUILD_NUMBER}"
-        MODEL_VERSION = "v1_${BUILD_NUMBER}"
+        COMPOSE_FILE_INFRA   = "infra/docker-compose.yml"
+        COMPOSE_FILE_TEST    = "infra/docker-compose.test.yml"
     }
 
     stages {
+        // =========================================================================
+        // 1. CHECKOUT — Clone repo and log commit info
+        // =========================================================================
         stage('Checkout') {
             steps {
                 checkout scm
-                sh 'echo "Branch: $(git rev-parse --abbrev-ref HEAD)"'
-                sh 'echo "Commit: $(git rev-parse --short HEAD)"'
+                sh '''
+                    echo "=========================================="
+                    echo "Branch:  $(git rev-parse --abbrev-ref HEAD)"
+                    echo "Commit:  $(git rev-parse --short HEAD)"
+                    echo "Author:  $(git log -1 --format='%an')"
+                    echo "Message: $(git log -1 --format='%s')"
+                    echo "=========================================="
+                '''
             }
         }
 
+        // =========================================================================
+        // 2. BUILD — Build all Docker images
+        // =========================================================================
         stage('Build') {
             steps {
-                sh 'docker compose -f infra/docker-compose.yml build'
+                sh 'docker compose -f "${COMPOSE_FILE_INFRA}" build --no-cache'
             }
         }
 
-        stage('Test') {
+        // =========================================================================
+        // 3. UNIT TESTS — Run pytest with mocked dependencies (fast, no infra needed)
+        // =========================================================================
+        stage('Unit Tests') {
             steps {
                 script {
-                    // Start test infrastructure
-                    sh 'docker compose -f infra/docker-compose.test.yml up -d'
-
-                    // Allow services to warm up
-                    sh 'sleep 15'
-
-                    // Run API tests if available
+                    // Run unit tests inside the API container (no external deps needed)
                     sh '''
-                        docker compose -f infra/docker-compose.test.yml exec -T api-test \
-                            sh -c "if [ -d api/tests ]; then pytest api/tests/ -v --tb=short; else echo \"No API tests found\"; fi" || true
-                    '''
-
-                    // Run Spark tests if available
-                    sh '''
-                        docker compose -f infra/docker-compose.test.yml exec -T api-test \
-                            sh -c "if [ -d spark/tests ]; then pytest spark/tests/ -v --tb=short; else echo \"No Spark tests found\"; fi" || true
+                        docker compose -f "${COMPOSE_FILE_TEST}" run --rm api-test \
+                            sh -c "pip install pytest pytest-asyncio httpx --quiet && \
+                                   pytest tests/test_api/ -v --tb=short --junitxml=test-results.xml"
                     '''
                 }
             }
             post {
                 always {
-                    sh 'docker compose -f infra/docker-compose.test.yml down -v'
+                    // Collect test results if available
+                    junit allowEmptyResults: true, testResults: '**/test-results.xml'
                 }
             }
         }
 
+        // =========================================================================
+        // 4. LINT — Code quality checks (flake8 + black)
+        // =========================================================================
         stage('Lint') {
             steps {
                 script {
-                    // Lint Python API code if flake8 is available
+                    // Install linters and run checks — NO || true, failures are real
                     sh '''
-                        docker compose -f infra/docker-compose.test.yml run --rm api-test \
-                            sh -c "pip install flake8 black --quiet && flake8 api/ --max-line-length=120 --exclude=__pycache__ || true" || true
-                    '''
-
-                    // Format check with black
-                    sh '''
-                        docker compose -f infra/docker-compose.test.yml run --rm api-test \
-                            sh -c "black --check api/ || true" || true
+                        docker compose -f "${COMPOSE_FILE_TEST}" run --rm api-test \
+                            sh -c "pip install flake8 black --quiet && \
+                                   echo '--- flake8 ---' && \
+                                   flake8 api/ tests/ --max-line-length=120 --exclude=__pycache__,.venv && \
+                                   echo '--- black --check ---' && \
+                                   black --check api/ tests/"
                     '''
                 }
             }
         }
 
-        stage('Deploy') {
+        // =========================================================================
+        // 5. INTEGRATION TESTS — Full stack with MongoDB
+        // =========================================================================
+        stage('Integration Tests') {
             steps {
-                sh 'docker compose -f infra/docker-compose.yml down'
-                sh 'docker compose -f infra/docker-compose.yml up -d'
+                script {
+                    // Start test infrastructure
+                    sh 'docker compose -f "${COMPOSE_FILE_TEST}" up -d'
 
-                // Wait for services to be healthy
+                    // Wait for MongoDB to be healthy
+                    sh '''
+                        echo "Waiting for MongoDB to be healthy..."
+                        timeout 60 bash -c 'until docker compose -f "${COMPOSE_FILE_TEST}" exec -T mongodb-test mongosh --quiet --eval "db.runCommand({ping:1}).ok" >/dev/null 2>&1; do sleep 2; done'
+                        echo "MongoDB is healthy."
+                    '''
+
+                    // Run integration test script
+                    sh 'bash tests/integration/test_docker_compose.sh'
+                }
+            }
+            post {
+                always {
+                    sh 'docker compose -f "${COMPOSE_FILE_TEST}" down -v --remove-orphans || true'
+                }
+            }
+        }
+
+        // =========================================================================
+        // 6. DEPLOY — Bring up the full production stack
+        // =========================================================================
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                // Stop existing stack gracefully
+                sh 'docker compose -f "${COMPOSE_FILE_INFRA}" down --remove-orphans || true'
+
+                // Start fresh
+                sh 'docker compose -f "${COMPOSE_FILE_INFRA}" up -d'
+
+                // Wait for API health
                 sh '''
                     echo "Waiting for API to be healthy..."
-                    timeout 120 bash -c 'until curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health | grep -q "200"; do sleep 3; done'
+                    timeout 120 bash -c 'until curl -sf http://localhost:8000/health | grep -q "ok"; do sleep 3; done'
                     echo "API is healthy."
                 '''
 
-                // Verify dashboard is reachable
+                // Verify dashboard
                 sh '''
                     echo "Waiting for Dashboard..."
-                    timeout 60 bash -c 'until curl -s -o /dev/null -w "%{http_code}" http://localhost:80/ | grep -q "200"; do sleep 2; done'
+                    timeout 60 bash -c 'until curl -sf -o /dev/null http://localhost:80/; do sleep 2; done'
                     echo "Dashboard is reachable."
                 '''
             }
@@ -105,17 +149,30 @@ pipeline {
 
     post {
         always {
-            sh 'docker compose -f infra/docker-compose.yml logs --tail=100 || true'
-            sh 'docker compose -f infra/docker-compose.test.yml logs --tail=50 || true'
+            sh 'docker compose -f "${COMPOSE_FILE_INFRA}" logs --tail=50 || true'
         }
         success {
-            echo 'Pipeline succeeded! All services are up and healthy.'
+            echo '''
+            ==========================================
+            Pipeline SUCCEEDED!
+            ==========================================
+            All quality gates passed.
+            Services are up and healthy.
+            ==========================================
+            '''
         }
         failure {
-            echo 'Pipeline failed! Check logs above for details.'
+            echo '''
+            ==========================================
+            Pipeline FAILED!
+            ==========================================
+            Check the stage logs above to identify
+            the failing step.
+            ==========================================
+            '''
         }
         unstable {
-            echo 'Pipeline is unstable. Deployment may have been skipped.'
+            echo 'Pipeline is UNSTABLE — a quality gate failed. Deployment was skipped.'
         }
     }
 }
