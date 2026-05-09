@@ -52,12 +52,12 @@
   --transition-normal: 250ms ease;
   --transition-slow: 400ms ease;
 
-  /* Layout */
-  --sidebar-width: 240px;
-  --right-panel-width: 300px;
+   /* Layout */
+  --sidebar-width: 200px;
+  --right-panel-width: 260px;
   --header-height: 80px;
-  --gap: 20px;
-  --page-padding: 24px;
+  --gap: 14px;
+  --page-padding: 18px;
 }
 
 /* Reset & Base */
@@ -68,7 +68,7 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 body {
@@ -105,11 +105,12 @@ body {
     "sidebar main right";
   gap: var(--gap);
   min-height: 100vh;
-  max-width: 1600px;
+  max-width: 100vw;
   margin: 0 auto;
   background: var(--background);
   padding: var(--gap);
   align-items: start;
+  width: 100%;
 }
 
 /* ============================================================
