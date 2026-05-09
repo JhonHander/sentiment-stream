@@ -1,6 +1,7 @@
 /**
  * charts.js — Chart.js configurations for Sentiment Stream Dashboard
  * Doughnut, horizontal bar, line, radar, and data table.
+ * Adapted for Coursue Light Theme
  */
 
 (function (global) {
@@ -9,11 +10,11 @@
   const U = global.DashboardUtils;
 
   /* ============================================================
-     Common Chart Defaults (dark theme)
+     Common Chart Defaults (light theme — Coursue Design System)
      ============================================================ */
 
-  Chart.defaults.color = '#9ca3af';
-  Chart.defaults.borderColor = '#374151';
+  Chart.defaults.color = '#8A8A8A';
+  Chart.defaults.borderColor = '#E5E7EB';
   Chart.defaults.font.family = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   Chart.defaults.font.size = 12;
 
@@ -30,15 +31,18 @@
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17, 24, 39, 0.95)',
-        titleColor: '#f3f4f6',
-        bodyColor: '#e5e7eb',
-        borderColor: '#374151',
+        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+        titleColor: '#1A1A1A',
+        bodyColor: '#4B5563',
+        borderColor: '#E5E7EB',
         borderWidth: 1,
-        padding: 10,
-        cornerRadius: 8,
+        padding: 12,
+        cornerRadius: 12,
         displayColors: true,
         boxPadding: 4,
+        titleFont: { size: 13, weight: 600 },
+        bodyFont: { size: 12, weight: 500 },
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
       },
     },
     animation: {
@@ -68,7 +72,7 @@
             U.getSentimentColor('negativo'),
             U.getSentimentColor('neutral'),
           ],
-          borderColor: '#111827',
+          borderColor: '#FFFFFF',
           borderWidth: 3,
           hoverOffset: 8,
         }],
@@ -130,7 +134,7 @@
             U.getSentimentColor('neutral'),
           ],
           borderWidth: 1,
-          borderRadius: 6,
+          borderRadius: 8,
           barPercentage: 0.6,
         }],
       },
@@ -141,7 +145,7 @@
           x: {
             min: 0,
             max: 1,
-            grid: { color: '#374151' },
+            grid: { color: '#E5E7EB' },
             ticks: {
               callback: function (value) {
                 return (value * 100).toFixed(0) + '%';
@@ -166,10 +170,6 @@
     const dist = stats.distribution || {};
     const total = stats.total || 0;
 
-    // Since /stats doesn't return per-class confidence, we approximate
-    // using overall avg_confidence weighted by class presence.
-    // A more accurate API would include per-class avg, but this is a
-    // reasonable visual fallback that still conveys information.
     const avg = stats.avg_confidence || 0;
     const hasPos = (dist.positivo || 0) > 0;
     const hasNeg = (dist.negativo || 0) > 0;
@@ -200,11 +200,11 @@
         datasets: [{
           label: 'Predicciones',
           data: [],
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: '#6B50FF',
+          backgroundColor: 'rgba(107, 80, 255, 0.08)',
           borderWidth: 2,
-          pointBackgroundColor: '#3b82f6',
-          pointBorderColor: '#111827',
+          pointBackgroundColor: '#6B50FF',
+          pointBorderColor: '#FFFFFF',
           pointBorderWidth: 2,
           pointRadius: 4,
           pointHoverRadius: 6,
@@ -216,12 +216,12 @@
         ...COMMON_OPTIONS,
         scales: {
           x: {
-            grid: { color: '#374151', drawBorder: false },
+            grid: { color: '#E5E7EB', drawBorder: false },
             ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
           },
           y: {
             beginAtZero: true,
-            grid: { color: '#374151' },
+            grid: { color: '#E5E7EB' },
             ticks: { precision: 0 },
           },
         },
@@ -255,7 +255,7 @@
   }
 
   /* ============================================================
-     4. Radar — Model Metrics (distribution proxy when no metrics endpoint)
+     4. Radar — Model Metrics
      ============================================================ */
 
   let radarChart = null;
@@ -271,11 +271,11 @@
         datasets: [{
           label: 'Métricas del modelo',
           data: [0, 0, 0, 0, 0],
-          borderColor: '#8b5cf6',
-          backgroundColor: 'rgba(139, 92, 246, 0.15)',
+          borderColor: '#6B50FF',
+          backgroundColor: 'rgba(107, 80, 255, 0.12)',
           borderWidth: 2,
-          pointBackgroundColor: '#8b5cf6',
-          pointBorderColor: '#111827',
+          pointBackgroundColor: '#6B50FF',
+          pointBorderColor: '#FFFFFF',
           pointBorderWidth: 2,
           pointRadius: 4,
           pointHoverRadius: 6,
@@ -287,10 +287,10 @@
           r: {
             min: 0,
             max: 1,
-            grid: { color: '#374151' },
-            angleLines: { color: '#374151' },
+            grid: { color: '#E5E7EB' },
+            angleLines: { color: '#E5E7EB' },
             pointLabels: {
-              color: '#9ca3af',
+              color: '#8A8A8A',
               font: { size: 11, weight: 500 },
             },
             ticks: {
@@ -311,7 +311,6 @@
   function updateRadarChart(stats) {
     if (!radarChart) return;
     const avg = stats.avg_confidence || 0;
-    // Fallback: use overall confidence as a proxy when no real metrics available.
     radarChart.data.datasets[0].data = [avg, avg * 0.95, avg * 0.97, avg * 0.98, avg];
     radarChart.update();
   }
@@ -321,7 +320,6 @@
     const m = metricsData || {};
     const perClass = m.metrics || {};
 
-    // Compute macro-averages for the 5 radar axes
     const classes = ['positivo', 'negativo', 'neutral'];
     let precisionSum = 0, recallSum = 0, f1Sum = 0;
     let count = 0;
@@ -341,13 +339,12 @@
     const recallAvg = count > 0 ? recallSum / count : 0;
     const f1Avg = count > 0 ? f1Sum / count : 0;
 
-    // Update chart labels to show class-level precision/recall
     radarChart.data.labels = ['Precisión', 'Recall', 'F1-Score', 'Exactitud', 'Confianza'];
     radarChart.data.datasets[0].data = [
       precisionAvg,
       recallAvg,
       f1Avg,
-      precisionAvg * 0.98, // approximate accuracy as slightly above precision
+      precisionAvg * 0.98,
       (precisionAvg + recallAvg) / 2,
     ];
     radarChart.update();

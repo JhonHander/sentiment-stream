@@ -119,23 +119,81 @@ curl "http://localhost:8000/model-metrics"
 - **Stop words**: Default English stop words are used; this may not optimally filter all irrelevant tokens.
 - **Model accuracy**: With only ~30 unique samples, the trained model is suitable for demonstration and educational purposes but should not be used for production sentiment analysis.
 
-## Jenkins Pipeline
+## Jenkins CI/CD Pipeline
 
-A declarative Jenkins pipeline is provided in `infra/Jenkinsfile`.
+A declarative Jenkins pipeline is provided in `infra/Jenkinsfile` with real quality gates (tests and lint must pass before deployment).
 
-**Stages:**
-1. **Checkout** — Pull latest code.
-2. **Build** — Build Docker images.
-3. **Test** — Run pytest suite inside containers.
-4. **Lint** — Run `flake8` and `black --check`.
-5. **Deploy** — Start services via `docker compose up -d`.
+### Pipeline Stages
 
-The pipeline uses `skipStagesAfterUnstable()` to prevent deployment if tests or linting fail.
+| Stage | What it does | Quality Gate |
+|-------|--------------|--------------|
+| **Checkout** | Clone repo, log branch/commit/author info | — |
+| **Build** | Build all Docker images (`--no-cache`) | — |
+| **Unit Tests** | Run pytest with mocked dependencies (fast, no external services) | ✅ Must pass |
+| **Lint** | `flake8` + `black --check` on `api/` and `tests/` | ✅ Must pass |
+| **Integration Tests** | Full stack with MongoDB, exercise API endpoints | ✅ Must pass |
+| **Deploy** | Bring up production stack, health checks | Only on `main` branch |
 
-**Setup:**
-1. Install Jenkins with Docker Pipeline plugin.
-2. Create a new Pipeline job pointing to your repository.
-3. Set the pipeline script path to `infra/Jenkinsfile`.
+### Quick Setup (Local Jenkins)
+
+```bash
+# 1. Start Jenkins with Docker support
+bash infra/scripts/jenkins.sh start
+
+# 2. Get initial admin password
+bash infra/scripts/jenkins.sh password
+
+# 3. Open http://localhost:8080 and complete setup:
+#    - Install suggested plugins
+#    - Install "Docker Pipeline" plugin
+
+# 4. Create Pipeline job:
+#    - New Item → "sentiment-stream" → Pipeline → OK
+#    - Pipeline Definition: "Pipeline script from SCM"
+#    - SCM: Git
+#    - Repository URL: https://github.com/JhonHander/sentiment-stream.git
+#    - Branch: */main
+#    - Script Path: infra/Jenkinsfile
+#    - Save → Build Now
+```
+
+### GitHub Webhook (Auto-trigger on push)
+
+1. GitHub repo → Settings → Webhooks → Add webhook
+2. Payload URL: `http://YOUR_JENKINS_IP:8080/github-webhook/`
+3. Content type: `application/json`
+4. Events: "Just the push event"
+5. In Jenkins job: Check "GitHub hook trigger for GITScm polling"
+
+### Architecture
+
+Jenkins runs in a separate container (`jenkins-network`) and uses the Docker socket to orchestrate the application stack (`sentiment-network`). This separation follows container best practices — Jenkins is infrastructure, not part of the application.
+
+```text
+Jenkins (jenkins-network)
+    │
+    │ /var/run/docker.sock
+    ▼
+docker compose up
+    │
+    ▼
+App Stack (sentiment-network)
+├── MongoDB
+├── Spark Master/Worker
+├── FastAPI
+└── Dashboard
+```
+
+### Helper Script Commands
+
+```bash
+bash infra/scripts/jenkins.sh start     # Build and start Jenkins
+bash infra/scripts/jenkins.sh stop      # Stop Jenkins
+bash infra/scripts/jenkins.sh restart   # Restart Jenkins
+bash infra/scripts/jenkins.sh logs      # Follow Jenkins logs
+bash infra/scripts/jenkins.sh password  # Get initial admin password
+bash infra/scripts/jenkins.sh status    # Check if Jenkins is running
+```
 
 ## Development
 
