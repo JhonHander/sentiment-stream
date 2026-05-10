@@ -16,12 +16,24 @@ pipeline {
     }
 
     environment {
-        COMPOSE_PROJECT_NAME = "sentiment-stream-${BUILD_NUMBER}"
+        // Fixed project name — compose files use hardcoded container_name values
+        // so we can't use dynamic project names (they'd conflict with container names)
+        COMPOSE_PROJECT_NAME = "sentiment-stream"
         COMPOSE_FILE_INFRA   = "infra/docker-compose.yml"
         COMPOSE_FILE_TEST    = "infra/docker-compose.test.yml"
     }
 
     stages {
+        // =========================================================================
+        // 0. CLEANUP — Remove orphan containers from previous builds
+        // =========================================================================
+        stage('Cleanup') {
+            steps {
+                sh 'docker compose -f "${COMPOSE_FILE_INFRA}" down --remove-orphans 2>/dev/null || true'
+                sh 'docker compose -f "${COMPOSE_FILE_TEST}" down --remove-orphans -v 2>/dev/null || true'
+            }
+        }
+
         // =========================================================================
         // 1. CHECKOUT — Clone repo and log commit info
         // =========================================================================

@@ -52,4 +52,5 @@ volumes:
 networks:
   sentiment-test-network:
     driver: bridge
-    name: sentiment-test-network
+    # No 'name:' override — docker compose uses project-prefixed name
+    # This avoids conflicts when running from different project contexts
