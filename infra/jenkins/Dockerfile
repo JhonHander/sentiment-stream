@@ -41,7 +41,9 @@ RUN curl -SL "https://github.com/docker/compose/releases/latest/download/docker-
 USER jenkins
 
 # Pre-install useful Jenkins plugins
+# jenkins-plugin-cli doesn't resolve transitive dependencies, so we list them explicitly
 RUN jenkins-plugin-cli --plugins \
+    jackson2-api \
     workflow-aggregator \
     git \
     pipeline-stage-view \
