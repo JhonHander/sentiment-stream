@@ -60,6 +60,9 @@ model/
 # Docker
 *.log
 
+# Jenkins (local bind mount — not committed)
+infra/jenkins_home/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -71,3 +74,4 @@ htmlcov/
 
 # Node / Dashboard
 node_modules/
+data/.*.lock.*

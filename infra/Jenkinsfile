@@ -44,7 +44,19 @@ pipeline {
         // =========================================================================
         stage('Build') {
             steps {
-                sh 'docker compose -f "${COMPOSE_FILE_INFRA}" build --no-cache'
+                script {
+                    // Stop all running containers first to free memory for the build
+                    // (apt-get install openjdk-21-jdk needs significant RAM)
+                    sh 'docker compose -f "${COMPOSE_FILE_INFRA}" down --remove-orphans 2>/dev/null || true'
+                    sh 'docker compose -f "${COMPOSE_FILE_TEST}" down --remove-orphans 2>/dev/null || true'
+
+                    // Build images one by one to avoid OOM
+                    // (parallel builds consume too much memory during JDK install)
+                    sh 'docker compose -f "${COMPOSE_FILE_INFRA}" build --no-cache spark-master'
+                    sh 'docker compose -f "${COMPOSE_FILE_INFRA}" build --no-cache spark-worker'
+                    sh 'docker compose -f "${COMPOSE_FILE_INFRA}" build --no-cache api'
+                    sh 'docker compose -f "${COMPOSE_FILE_INFRA}" build --no-cache dashboard'
+                }
             }
         }
 

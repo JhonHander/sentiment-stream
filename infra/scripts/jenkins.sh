@@ -29,9 +29,11 @@ header() { echo -e "${BLUE}=== $* ===${NC}"; }
 case "${1:-help}" in
     start)
         header "Starting Jenkins"
+        # Create jenkins_home directory on host if it doesn't exist (bind mount)
+        mkdir -p infra/jenkins_home
         docker compose -f "$COMPOSE_FILE" up -d --build
         info "Jenkins is starting up..."
-        info "Web UI: http://localhost:8080"
+        info "Web UI: http://localhost:8082"
         info "Get password: bash infra/scripts/jenkins.sh password"
         ;;
 
@@ -62,10 +64,10 @@ case "${1:-help}" in
         header "Jenkins Status"
         docker compose -f "$COMPOSE_FILE" ps
         echo ""
-        if curl -sf http://localhost:8080/login >/dev/null 2>&1; then
-            info "Jenkins is UP and running at http://localhost:8080"
+        if curl -sf http://localhost:8082/login >/dev/null 2>&1; then
+            info "Jenkins is UP and running at http://localhost:8082"
         else
-            warn "Jenkins is not responding on port 8080"
+            warn "Jenkins is not responding on port 8082"
         fi
         ;;
 

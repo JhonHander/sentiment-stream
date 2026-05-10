@@ -21,26 +21,19 @@ services:
       dockerfile: Dockerfile
     container_name: sentiment-jenkins
     restart: unless-stopped
+    user: root  # Required for Docker socket access and volume permissions
     ports:
-      - "8080:8080"     # Web UI
+      - "8082:8080"     # Web UI (8082 to avoid conflict with Spark Master on 8080)
       - "50000:50000"   # Agent communication
     volumes:
-      - jenkins_home:/var/jenkins_home
+      # Bind mount instead of named volume — Docker daemon can resolve paths
+      # because Jenkins workspace lives on the host filesystem
+      - ./jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
     networks:
       - jenkins-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/login || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
-volumes:
-  jenkins_home:
-    driver: local
 
 networks:
   jenkins-network:
