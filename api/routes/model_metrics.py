@@ -21,8 +21,7 @@ async def get_model_metrics(request: Request):
     if data is None:
         raise HTTPException(
             status_code=404,
-            detail="No se encontraron métricas del modelo. "
-            "Ejecute el entrenamiento (spark/train.py) primero.",
+            detail="No se encontraron métricas del modelo. " "Ejecute el entrenamiento (spark/train.py) primero.",
         )
 
     return ModelMetricsResponse(**data)

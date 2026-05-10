@@ -52,12 +52,7 @@ class Database:
                 query["timestamp"]["$lte"] = date_to
 
         total = await self.db.predictions.count_documents(query)
-        cursor = (
-            self.db.predictions.find(query, {"_id": 0})
-            .sort("timestamp", -1)
-            .skip(offset)
-            .limit(limit)
-        )
+        cursor = self.db.predictions.find(query, {"_id": 0}).sort("timestamp", -1).skip(offset).limit(limit)
         items = await cursor.to_list(length=limit)
         return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -65,9 +60,7 @@ class Database:
         """Agrega estadísticas: distribución, confianza promedio y serie temporal."""
         # Distribución por clase de sentimiento
         distribution: dict[str, int] = {}
-        async for doc in self.db.predictions.aggregate(
-            [{"$group": {"_id": "$prediction", "count": {"$sum": 1}}}]
-        ):
+        async for doc in self.db.predictions.aggregate([{"$group": {"_id": "$prediction", "count": {"$sum": 1}}}]):
             distribution[doc["_id"]] = doc["count"]
 
         # Confianza promedio y total de documentos

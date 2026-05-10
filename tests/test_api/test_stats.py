@@ -88,7 +88,4 @@ class TestModelMetrics:
         response = client.get("/model-metrics")
 
         assert response.status_code == 404
-        assert (
-            "métricas" in response.json()["detail"].lower()
-            or "metrics" in response.json()["detail"].lower()
-        )
+        assert "métricas" in response.json()["detail"].lower() or "metrics" in response.json()["detail"].lower()

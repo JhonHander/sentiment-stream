@@ -40,9 +40,7 @@ class TestSentiments:
         assert data["total"] == 5
         assert len(data["items"]) == 2
 
-    def test_sentiments_filter_by_sentiment(
-        self, client: TestClient, fake_db: FakeDatabase
-    ):
+    def test_sentiments_filter_by_sentiment(self, client: TestClient, fake_db: FakeDatabase):
         _seed_predictions(fake_db, n=6)
 
         response = client.get("/sentiments?sentiment=positivo")

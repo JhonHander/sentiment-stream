@@ -26,8 +26,7 @@ class ModelLoader:
         path = path or settings.model_path
         if not os.path.exists(path):
             raise FileNotFoundError(
-                f"No se encontró el modelo en {path}. "
-                "Ejecute el entrenamiento (train.py) antes de iniciar la API."
+                f"No se encontró el modelo en {path}. " "Ejecute el entrenamiento (train.py) antes de iniciar la API."
             )
 
         logger.info(f"Cargando modelo desde {path}")

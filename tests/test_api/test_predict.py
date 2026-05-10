@@ -13,14 +13,10 @@ from fastapi.testclient import TestClient
 from tests.conftest import FakeDatabase
 
 
-def _mock_transform(
-    loader: MagicMock, text: str, prediction_label: str, confidence: float
-):
+def _mock_transform(loader: MagicMock, text: str, prediction_label: str, confidence: float):
     """Configure the fake loader so that predict_text returns known values."""
     row = MagicMock()
-    row.prediction = {"positivo": 0.0, "negativo": 1.0, "neutral": 2.0}.get(
-        prediction_label, 0.0
-    )
+    row.prediction = {"positivo": 0.0, "negativo": 1.0, "neutral": 2.0}.get(prediction_label, 0.0)
     row.probability = [0.1, 0.1, 0.1]
     # Set the confidence on the predicted class index
     idx = {"positivo": 0, "negativo": 1, "neutral": 2}.get(prediction_label, 0)
@@ -33,9 +29,7 @@ def _mock_transform(
 
 
 class TestPredict:
-    def test_predict_valid_input(
-        self, client: TestClient, fake_db: FakeDatabase, fake_model_loader: MagicMock
-    ):
+    def test_predict_valid_input(self, client: TestClient, fake_db: FakeDatabase, fake_model_loader: MagicMock):
         _mock_transform(fake_model_loader, "I love this", "positivo", 0.92)
 
         response = client.post("/predict", json={"text": "I love this product"})
@@ -56,10 +50,7 @@ class TestPredict:
         response = client.post("/predict", json={"text": "   "})
 
         assert response.status_code == 422
-        assert (
-            "vacío" in response.json()["detail"].lower()
-            or "empty" in response.json()["detail"].lower()
-        )
+        assert "vacío" in response.json()["detail"].lower() or "empty" in response.json()["detail"].lower()
 
     def test_predict_model_not_loaded(self, client: TestClient, fake_db: FakeDatabase):
         # Simulate model load failure
@@ -69,8 +60,7 @@ class TestPredict:
 
         assert response.status_code == 503
         assert (
-            "no disponible" in response.json()["detail"].lower()
-            or "not available" in response.json()["detail"].lower()
+            "no disponible" in response.json()["detail"].lower() or "not available" in response.json()["detail"].lower()
         )
 
     def test_predict_too_long_text(self, client: TestClient):
