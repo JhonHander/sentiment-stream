@@ -16,7 +16,7 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
-      - ./infra/mongodb-init.js:/docker-entrypoint-initdb.d/mongodb-init.js:ro
+      - ./mongodb-init.js:/docker-entrypoint-initdb.d/mongodb-init.js:ro
     environment:
       MONGO_INITDB_DATABASE: sentiment_stream
     healthcheck:

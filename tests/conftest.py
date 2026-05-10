@@ -5,8 +5,7 @@ and ML model loader) so that unit tests run without external dependencies.
 """
 
 from datetime import datetime
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
